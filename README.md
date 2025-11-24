@@ -1,3 +1,4 @@
+
 ---
 
 # Reproduction of LAM (StQP) Model — Cesarone et al. (2011)
