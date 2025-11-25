@@ -2,26 +2,23 @@ import pandas as pd
 import numpy as np
 import os
 
-def load_data(filepath):
+def load_data(filepath, start_date=None, end_date=None):
     """
     Loads financial data from CSV, calculates expected returns and covariance matrix.
 
     Args:
         filepath (str): Path to the CSV file.
+        start_date (str or pd.Timestamp, optional): Start date for optimization period.
+        end_date (str or pd.Timestamp, optional): End date for optimization period.
 
     Returns:
-        tuple: (mu, sigma, asset_names)
-            - mu (pd.Series): Expected return vector (mean daily return).
-            - sigma (pd.DataFrame): Covariance matrix of daily returns.
+        tuple: (mu, sigma, asset_names, df)
+            - mu (pd.Series): Expected return vector (mean daily return) over the specified period.
+            - sigma (pd.DataFrame): Covariance matrix of daily returns over the specified period.
             - asset_names (list): List of asset names.
+            - df (pd.DataFrame): Full dataframe of prices (cleaned).
     """
     print(f"Loading data from {filepath}...")
-    
-    # Load data with Shift-JIS encoding, skipping garbage lines
-    # Based on inspection, the header seems to be around line 7 (0-indexed 6)
-    # Load data with Shift-JIS encoding
-    # Line 1 (0-indexed) has the asset codes: "コード,6098,4502,..."
-    # Line 7 (0-indexed) seems to be the start of data: "2021/10/20,..."
     
     try:
         # Read just the header line
@@ -29,19 +26,10 @@ def load_data(filepath):
         # The first column is 'コード', the rest are asset codes.
         asset_codes = header_df.iloc[0, 1:].tolist()
         
-        # Read the data
-        # Skip garbage lines. Based on inspection, data starts after some lines.
-        # Let's try reading from line 7 (skiprows=6) but we need to handle the header manually.
-        # Actually, if we use skiprows=6, the first line read will be the header.
-        # But the line 6 (0-indexed) is "値,終値,終値..." which is useless.
-        # Line 7 (0-indexed) is the first data row.
-        # So we should read with header=None and skiprows=7.
-        
+        # Read the data       
         df = pd.read_csv(filepath, encoding='shift_jis', header=None, skiprows=6)
         
         # Assign columns
-        # First column is Date, rest are asset codes
-        # Check if dimensions match
         if df.shape[1] == len(asset_codes) + 1:
             df.columns = ['Date'] + asset_codes
         else:
@@ -68,7 +56,6 @@ def load_data(filepath):
     df = df.sort_index()
 
     # Drop columns that are not assets (if any)
-    # Ensure all columns are numeric
     df = df.apply(pd.to_numeric, errors='coerce')
     
     # Drop columns with too many NaNs
@@ -81,15 +68,26 @@ def load_data(filepath):
     # r_t = (P_t - P_{t-1}) / P_{t-1}
     returns = df.pct_change().dropna()
 
+    # Filter returns for optimization if dates are provided
+    opt_returns = returns.copy()
+    if start_date:
+        opt_returns = opt_returns[opt_returns.index >= pd.to_datetime(start_date)]
+    if end_date:
+        opt_returns = opt_returns[opt_returns.index <= pd.to_datetime(end_date)]
+
+    if opt_returns.empty:
+        raise ValueError("No data found for the specified date range.")
+
     # Expected Return (Mean Daily Return)
-    mu = returns.mean()
+    mu = opt_returns.mean()
 
     # Covariance Matrix
-    sigma = returns.cov()
+    sigma = opt_returns.cov()
     
     asset_names = df.columns.tolist()
     
-    print(f"Data loaded successfully. {len(asset_names)} assets, {len(returns)} time periods.")
+    print(f"Data loaded successfully. {len(asset_names)} assets.")
+    print(f"Optimization period: {opt_returns.index.min().date()} to {opt_returns.index.max().date()} ({len(opt_returns)} periods)")
     
     return mu, sigma, asset_names, df
 

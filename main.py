@@ -25,7 +25,7 @@ def main():
     
     # 1. Load Data
     try:
-        mu, sigma, assets = load_data(DATA_FILE)
+        mu, sigma, assets, _ = load_data(DATA_FILE)
     except Exception as e:
         print(f"Error loading data: {e}")
         return
