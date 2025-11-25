@@ -37,7 +37,7 @@ def load_data(filepath):
         # Line 7 (0-indexed) is the first data row.
         # So we should read with header=None and skiprows=7.
         
-        df = pd.read_csv(filepath, encoding='shift_jis', header=None, skiprows=7)
+        df = pd.read_csv(filepath, encoding='shift_jis', header=None, skiprows=6)
         
         # Assign columns
         # First column is Date, rest are asset codes
@@ -91,12 +91,11 @@ def load_data(filepath):
     
     print(f"Data loaded successfully. {len(asset_names)} assets, {len(returns)} time periods.")
     
-    return mu, sigma, asset_names
+    return mu, sigma, asset_names, df
 
 if __name__ == "__main__":
-    # Test run
     try:
-        mu, sigma, assets = load_data('data/topix-large500.csv')
+        mu, sigma, assets, _ = load_data('data/topix-large500.csv')
         print("Top 5 Expected Returns:")
         print(mu.head())
         print("\nCovariance Matrix Shape:", sigma.shape)
