@@ -72,25 +72,92 @@ f_M(x) = x^T Q_M x
 
 ---
 
-# III. 解法アルゴリズムの要件
+# III. 解法アルゴリズムの要件（本実装での扱い）
 
-LAM（StQP）モデルの解法には、本論文で提案された **Increasing Set Algorithm (IS)** を実装する必要があります。
-
-## 1. Increasing Set Algorithm (IS)
-
-* $j = 1 \dots K$ に対して資産組合せを探索
-* 各部分集合 $I$ について
-
-  * 部分行列 $Q_I$ の正定値性チェック
-  * 相対内部での最適性チェック
-* 数量制約を満たす集合 $C'_j$ と満たさない集合 $C''_j$ を区別
-* $C''_K$ に対しては追加の凸二次計画（QP）を解く
+本リポジトリでは、Cesarone et al. (2011) の LAM（StQP）モデルを完全に厳密に再現するのではなく、**Increasing Set Algorithm (IS)** の構造を参考にした **Forward Selection 型の近似アルゴリズム**によって、カーディナリティ制約付き StQP を解く実装を提供する。
 
 ---
 
-## 2. 必要なライブラリ
+## 1. 本実装でのアルゴリズム（Forward Selection / Greedy IS）
 
-* **NumPy / SciPy**（線形代数）
-* **CVXPY / Gurobi / MOSEK / SciPy Optimize**
-  （最終ステージの QP のため）
+論文で提案されている IS（Increasing Set Algorithm）は以下の処理を含む複雑な手法だが、本リポジトリのコードではその構造を簡略化し、以下の Greedy Forward Selection ベースの手法を用いている。
 
+### **Step 1 — k = 1 から K まで資産数を増やしながら探索**
+
+* 現在の資産集合 ( S_{k-1} ) に対し、
+  追加候補となる資産を 1 つずつ試し、
+  各候補について次の QP を解いて目的関数値を比較する：
+
+```math
+\min_x \; x^\top \Sigma x + M (x^\top \mu - \rho)^2
+```
+
+* その中で最も目的関数が小さくなる資産を追加し、
+  ( S_k = S_{k-1} \cup {i^*} ) とする。
+
+---
+
+### **Step 2 — 部分集合に対する QP（StQP）の解法**
+
+各候補資産を追加した部分集合 ( I ) に対して：
+
+* 部分ベクトル ( \mu_I )
+* 部分共分散行列 ( \Sigma_I )
+
+を抽出し、
+SciPy の SLSQP により **数量制約付き QP** を解く：
+
+制約：
+
+```math
+\sum_{i \in I} x_i = 1, \quad
+\ell \le x_i \le u
+```
+
+目的関数：
+
+```math
+x^\top \Sigma_I x + M (x^\top \mu_I - \rho)^2
+```
+
+---
+
+### **Step 3 — 最良解の更新**
+
+* k 個の資産で得た最良の QP 解が過去の最良値より良ければ更新
+* これを k=1〜K の間で繰り返し、**最良の部分集合**とその **最適ウェイトベクトル**を返す
+
+---
+
+## 2. Increasing Set Algorithm（論文版）との関係
+
+論文で提案されている Increasing Set Algorithm（IS）は、
+以下の手順を含む厳密な StQP 解法：
+
+* 部分行列の正定値性判定
+* relative interior 最適性の検証
+* feasible / infeasible サブセットの分類
+* ( C''_K ) に対する追加の凸 QP 解法
+
+本実装は **IS の完全な再現ではなく**、
+IS の「資産集合を増やしながら探索する」構造のみを踏襲した
+**Forward Selection（貪欲法）による近似的な解法**である。
+
+---
+
+## 3. 使用ライブラリ（本実装）
+
+本リポジトリのコードに必要なのは以下のライブラリ：
+
+### **線形代数・数値計算**
+
+* **NumPy**
+* **Pandas**
+
+### **部分集合ごとの QP（SLSQP）**
+
+* **SciPy Optimize**
+
+※ 論文の IS の完全版実装に必要となる
+「正定値性判定」「半正定値計画」「外部 QP ソルバ（Gurobi/MOSEK/CVXPY）」
+などは **本コードでは使用していない**。
