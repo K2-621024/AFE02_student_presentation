@@ -8,97 +8,102 @@ import matplotlib.pyplot as plt
 sys.path.append(os.path.dirname(__file__))
 
 from data_loader import load_data
-from solver import solve_lam_stqp
 
-def visualize_portfolio_performance():
-    # Parameters
-    DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'topix-large500.csv')
-    
-    # Define Optimization Period (In-Sample)
-    # Example: Use 1 year for optimization
-    START_DATE = '2022-01-01'
-    END_DATE = '2022-12-31'
-    
-    TARGET_RETURN = 0.0005  # 0.05% daily return
-    CARDINALITY_K = 10
-    MIN_WEIGHT = 0.01
-    MAX_WEIGHT = 1.0
-    PENALTY_M = 1000.0
+
+def visualize_portfolio_performance(
+        start_date,
+        end_date,
+        weight_csv_path,
+        output_dir="image",
+        output_filename="portfolio_performance.png"
+    ):
+    """
+    Visualize portfolio cumulative performance using:
+    - Optimization period: start_date ~ end_date
+    - Portfolio weights loaded from CSV (index = asset code, column = Weight)
+    """
+
+    # === 1. Directory setup ===
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    # === 2. Load portfolio weights ===
+    try:
+        weights = pd.read_csv(weight_csv_path, index_col=0)
+        if "Weight" not in weights.columns:
+            raise ValueError("CSV must contain a 'Weight' column.")
+        weights = weights["Weight"]
+    except Exception as e:
+        print(f"Error loading weight CSV: {e}")
+        return
 
     print("=== Portfolio Performance Visualization ===")
-    print(f"Optimization Period: {START_DATE} to {END_DATE}")
-    
-    # 1. Load Data with Date Filtering for Optimization
-    try:
-        # mu and sigma are calculated based on the filtered period
-        # df_full contains the entire dataset
-        mu, sigma, assets, df_full = load_data(DATA_FILE, start_date=START_DATE, end_date=END_DATE)
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        return
+    print(f"Optimization Period: {start_date} to {end_date}")
+    print(f"Loaded {len(weights)} selected assets.")
 
-    # 2. Solve Optimization Problem
+    # === 3. Load market data ===
+    DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'topix-large500.csv')
+
     try:
-        result = solve_lam_stqp(
-            mu, sigma, 
-            target_return=TARGET_RETURN, 
-            k_max=CARDINALITY_K, 
-            min_weight=MIN_WEIGHT, 
-            max_weight=MAX_WEIGHT, 
-            penalty_m=PENALTY_M
+        _, _, _, df_full = load_data(
+            DATA_FILE,
+            start_date=start_date,
+            end_date=end_date
         )
-        
-        print("\nOptimization Successful!")
-        print(f"Selected Assets: {result['assets']}")
-        
-        weights = result['weights']
-        
     except Exception as e:
-        print(f"Optimization failed: {e}")
+        print(f"Error loading market data: {e}")
         return
 
-    # 3. Calculate Portfolio Performance over the Entire Period
-    # Calculate daily returns for the full dataset
+    # === 4. Compute daily returns for full data ===
     full_returns = df_full.pct_change().dropna()
-    
-    # Align weights with full_returns columns
-    # Create a weight vector aligned with full_returns columns (assets)
-    # Weights are 0 for assets not selected
+
+    # === 5. Align weights to available columns ===
     aligned_weights = pd.Series(0.0, index=full_returns.columns)
-    aligned_weights[weights.index] = weights
     
-    # Calculate portfolio daily returns: R_p = sum(w_i * r_i)
+    for asset_code, w in weights.items():
+        if str(asset_code) in aligned_weights.index:
+            aligned_weights[str(asset_code)] = w
+        else:
+            print(f"Warning: Asset {asset_code} not found in data. Weight ignored.")
+
+    # === 6. Portfolio returns ===
     portfolio_daily_returns = full_returns.dot(aligned_weights)
-    
-    # Calculate Cumulative Return
-    # Cumulative Return = (1 + r_1) * (1 + r_2) * ... - 1
-    # Or simpler: Cumulative Wealth = cumprod(1 + r)
+
+    # === 7. Cumulative wealth ===
     cumulative_wealth = (1 + portfolio_daily_returns).cumprod()
-    
-    # 4. Visualization
+
+    # === 8. Plot ===
     plt.figure(figsize=(12, 6))
-    
-    # Plot Cumulative Wealth
-    plt.plot(cumulative_wealth.index, cumulative_wealth, label='Portfolio Cumulative Return', color='blue')
-    
-    # Highlight Optimization Period
-    plt.axvspan(pd.to_datetime(START_DATE), pd.to_datetime(END_DATE), color='green', alpha=0.1, label='Optimization Period (In-Sample)')
-    
-    # Highlight Out-of-Sample Period (after END_DATE)
+    plt.plot(cumulative_wealth.index, cumulative_wealth, label='Portfolio Cumulative Return')
+
+    # Highlight in-sample period
+    plt.axvspan(pd.to_datetime(start_date), pd.to_datetime(end_date),
+                color='green', alpha=0.1, label='In-Sample (Optimization)')
+
+    # Highlight out-of-sample
     last_date = cumulative_wealth.index[-1]
-    if last_date > pd.to_datetime(END_DATE):
-        plt.axvspan(pd.to_datetime(END_DATE), last_date, color='orange', alpha=0.1, label='Evaluation Period (Out-of-Sample)')
+    if last_date > pd.to_datetime(end_date):
+        plt.axvspan(pd.to_datetime(end_date), last_date,
+                    color='orange', alpha=0.1, label='Out-of-Sample')
 
-    plt.title('Portfolio Performance: In-Sample vs Out-of-Sample')
-    plt.xlabel('Date')
-    plt.ylabel('Cumulative Wealth (Start=1.0)')
-    plt.legend()
+    plt.title("Portfolio Performance: In-Sample vs Out-of-Sample")
+    plt.xlabel("Date")
+    plt.ylabel("Cumulative Wealth (Start = 1)")
     plt.grid(True)
-    
-    output_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'portfolio_performance.png')
-    plt.savefig(output_path)
-    print(f"\nVisualization saved to {output_path}")
-    # plt.show() # Commented out for headless environment
+    plt.legend()
 
+    # === 9. Save figure ===
+    output_path = os.path.join(output_dir, output_filename)
+    plt.savefig(output_path)
+    print(f"Saved figure to: {output_path}")
+
+
+# Test run example
 if __name__ == "__main__":
-    visualize_portfolio_performance()
+    visualize_portfolio_performance_with_args(
+        start_date="2022-01-01",
+        end_date="2022-12-31",
+        weight_csv_path="weights.csv",
+        output_dir="image",
+        output_filename="portfolio_performance.png"
+    )

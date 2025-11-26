@@ -31,16 +31,13 @@ def load_data(filepath, start_date=None, end_date=None):
         
         # Assign columns
         if df.shape[1] == len(asset_codes) + 1:
-            df.columns = ['Date'] + asset_codes
+            df.columns = ['Date'] + [str(c) for c in asset_codes]
         else:
-            # Fallback if dimensions don't match exactly (e.g. trailing comma)
             print(f"Warning: Shape mismatch. Data cols: {df.shape[1]}, Codes: {len(asset_codes)}")
-            # Try to match as many as possible
-            cols = ['Date'] + asset_codes
+            cols = ['Date'] + [str(c) for c in asset_codes]
             if len(cols) > df.shape[1]:
                 df.columns = cols[:df.shape[1]]
             else:
-                # If data has more columns, just name them generic
                 extra_cols = [f"Unknown_{i}" for i in range(df.shape[1] - len(cols))]
                 df.columns = cols + extra_cols
 
