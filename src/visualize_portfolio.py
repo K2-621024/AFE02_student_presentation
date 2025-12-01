@@ -13,6 +13,7 @@ from data_loader import load_data
 def visualize_portfolio_performance(
         start_date,
         end_date,
+        price_csv_path,
         weight_csv_path,
         output_dir="image",
         output_filename="portfolio_performance.png"
@@ -41,12 +42,9 @@ def visualize_portfolio_performance(
     print(f"Optimization Period: {start_date} to {end_date}")
     print(f"Loaded {len(weights)} selected assets.")
 
-    # === 3. Load market data ===
-    DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'topix-large500.csv')
-
     try:
         _, _, _, df_full = load_data(
-            DATA_FILE,
+            price_csv_path,
             start_date=start_date,
             end_date=end_date
         )
@@ -100,9 +98,10 @@ def visualize_portfolio_performance(
 
 # Test run example
 if __name__ == "__main__":
-    visualize_portfolio_performance_with_args(
+    visualize_portfolio_performance(
         start_date="2022-01-01",
         end_date="2022-12-31",
+        price_csv_path="data/topix-large500.csv",
         weight_csv_path="weights.csv",
         output_dir="image",
         output_filename="portfolio_performance.png"
