@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from time import time
 
-from solver import solve_lam_stqp
+from solver_LAM import solve_lam_stqp
 from data_loader import load_data
 
 def compute_efficient_frontier(mu, sigma, 
