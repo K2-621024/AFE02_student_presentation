@@ -12,7 +12,7 @@ def solve_qp_subset(mu_sub, sigma_sub, target_return, penalty_m, min_weight, max
     if n == 0:
         return None, np.inf
 
-    x0 = np.ones(n) / n  # Initial guess
+    x0 = np.ones(n) / n
 
     def objective(x):
         port_return = np.dot(x, mu_sub)
