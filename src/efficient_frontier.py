@@ -2,56 +2,76 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from time import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from solver_LAM import solve_lam_stqp
 from data_loader import load_data
 
-def compute_efficient_frontier(mu, sigma, 
-                               n_points=100, 
-                               k_max=10, 
-                               min_weight=0.01, max_weight=1.0, 
-                               penalty_m=1000.0):
-    """
-    Computes efficient frontier points using solve_lam_stqp().
-    """
+
+def compute_efficient_frontier_parallel(
+        mu, sigma,
+        n_points=100,
+        k_max=10,
+        min_weight=0.01, max_weight=1.0,
+        penalty_m=1000.0,
+        max_workers=None
+    ):
 
     target_min = mu.min()
     target_max = mu.max() * 1.5
     target_returns = np.linspace(target_min, target_max, n_points)
 
-    risks = []
-    returns = []
-    weights_list = []
+    risks = np.zeros(n_points)
+    returns = np.zeros(n_points)
+    weights_list = [None] * n_points
 
     start_time = time()
 
-    for tr in target_returns:
-        try:
-            res = solve_lam_stqp(mu, sigma, tr, 
-                                 k_max=k_max,
-                                 min_weight=min_weight, 
-                                 max_weight=max_weight, 
-                                 penalty_m=penalty_m)
-            
-            risks.append(res["risk"])
-            returns.append(res["return"])
-            weights_list.append(res["weights"])
+    print(f"Starting parallel efficient frontier ({n_points} points)...")
 
-        except Exception as e:
-            print(f"Warning: Optimization failed at target={tr:.4f}: {e}")
-            risks.append(np.nan)
-            returns.append(np.nan)
-            weights_list.append(None)
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_idx = {
+            executor.submit(
+                solve_lam_stqp,
+                mu, sigma, tr,
+                k_max, min_weight, max_weight, penalty_m
+            ): idx
+            for idx, tr in enumerate(target_returns)
+        }
+
+        completed = 0
+
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            tr = target_returns[idx]
+
+            try:
+                res = future.result()
+                risks[idx] = res["risk"]
+                returns[idx] = res["return"]
+                weights_list[idx] = res["weights"]
+
+            except Exception as e:
+                print(f"Warning: Optimization failed at target={tr:.4f}: {e}")
+                risks[idx] = np.nan
+                returns[idx] = np.nan
+                weights_list[idx] = None
+
+            completed += 1
+            progress = completed / n_points * 100
+            print(f"\rProgress: {completed}/{n_points} ({progress:.1f}%)", end="")
 
     elapsed = time() - start_time
-    print(f"\nFinished efficient frontier in {elapsed:.2f} seconds.")
+    print(f"\nFinished efficient frontier in {elapsed:.2f} seconds (parallel).")
 
     return {
-        "risks": np.array(risks),
-        "returns": np.array(returns),
+        "risks": risks,
+        "returns": returns,
         "weights": weights_list,
         "targets": target_returns
     }
+
+
 
 def plot_efficient_frontier(frontier):
     """
